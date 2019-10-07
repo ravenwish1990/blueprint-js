@@ -1,7 +1,7 @@
 import $ from 'jquery';
 import {Vector2} from 'three';
 import {WallTypes} from '../core/constants.js';
-import {Utils} from '../core/utils.js';
+import {Utils, BatchLine} from '../core/utils.js';
 import {EVENT_UPDATED} from '../core/events.js';
 
 import {Dimensioning} from '../core/dimensioning.js';
@@ -9,7 +9,7 @@ import {Configuration, gridSpacing, configWallThickness, wallInformation} from '
 import {CarbonSheet} from './carbonsheet.js';
 
 /** */
-export const floorplannerModes = {MOVE: 0,DRAW: 1,DELETE: 2};
+export const floorplannerModes = {MOVE: 0,DRAW: 1,DELETE: 2,ADD: 3};
 
 // grid parameters
 //export const gridSpacing = Dimensioning.cmToPixel(25);//20; // pixels
@@ -43,6 +43,7 @@ export const cornerRadiusSelected = 9;
 export const cornerColor = '#cccccc';
 export const cornerColorHover = '#008cba';
 export const cornerColorSelected = '#00ba8c';
+
 /**
  * The View to be used by a Floorplanner to render in/interact with.
  */
@@ -74,7 +75,7 @@ export class FloorplannerView2D
 	{
 		return this._carbonsheet;
 	}
-	
+
 	orientationChange()
 	{
 		this.handleWindowResize();
@@ -85,20 +86,20 @@ export class FloorplannerView2D
 	{
 		var canvasSel = $('#' + this.canvas);
 		var parent = canvasSel.parent();
-		
+
 		parent.css({width: window.innerWidth, height: window.innerHeight});
-		
+
 		var w = window.innerWidth;//parent.innerWidth();
 		var h = window.innerHeight;//parent.innerHeight();
-		
+
 //		console.log(window.innerWidth, window.innerHeight);
 //		console.log(w, h);
-		
+
 		canvasSel.height(h);
 		canvasSel.width(w);
 		this.canvasElement.height = h;
 		this.canvasElement.width = w;
-		
+
 		this.draw();
 	}
 
@@ -108,9 +109,9 @@ export class FloorplannerView2D
 		wallWidth = Dimensioning.cmToPixel(Configuration.getNumericValue(configWallThickness));
 		wallWidthHover = Dimensioning.cmToPixel(Configuration.getNumericValue(configWallThickness))*0.7;
 		wallWidthSelected = Dimensioning.cmToPixel(Configuration.getNumericValue(configWallThickness))*0.9;
-		
+
 		this.context.clearRect(0, 0, this.canvasElement.width, this.canvasElement.height);
-		
+
 		this._carbonsheet.draw();
 		this.drawGrid();
 		this.drawOriginCrossHair();
@@ -124,11 +125,11 @@ export class FloorplannerView2D
 			this.drawCorner(corner);
 //			this.drawCornerAngles(corner);
 			});
-		
+
 		// this.context.globalAlpha = 0.3;
 //		this.floorplan.getRooms().forEach((room) => {this.drawRoom(room);});
 		// this.context.globalAlpha = 1.0;
-		
+
 		if (this.viewmodel.mode == floorplannerModes.DRAW)
 		{
 			this.drawTarget(this.viewmodel.targetX, this.viewmodel.targetY, this.viewmodel.lastNode);
@@ -140,28 +141,28 @@ export class FloorplannerView2D
 				var abvector = b.clone().sub(a);
 				var midPoint = abvector.multiplyScalar(0.5).add(a);
 				this.drawTextLabel(Dimensioning.cmToMeasure(a.distanceTo(b)), this.viewmodel.convertX(midPoint.x), this.viewmodel.convertY(midPoint.y));
-				
+
 				//Show angle to the nearest wall
 				var vector = b.clone().sub(a);
 				var sAngle = (vector.angle()*180) / Math.PI;
-				var result = this.viewmodel.lastNode.closestAngle(sAngle);				
+				var result = this.viewmodel.lastNode.closestAngle(sAngle);
 				var eAngle = result['angle'];
 				var closestVector = result['point'].sub(a);
-				
+
 				var textDistance = 60;
 				var radius = Math.min(textDistance, vector.length());
 //				radius = Math.max(radius, )
 				var location = vector.normalize().add(closestVector.normalize()).multiplyScalar(textDistance).add(a);
-				
+
 				var ox = this.viewmodel.convertX(this.viewmodel.lastNode.x);
 				var oy = this.viewmodel.convertY(this.viewmodel.lastNode.y);
 				var angle = Math.abs(eAngle - sAngle);
 				angle = (angle > 180) ? 360 - angle : angle;
-				angle = Math.round(angle * 10) / 10;				
-				
+				angle = Math.round(angle * 10) / 10;
+
 				sAngle = (sAngle * Math.PI) / 180;
-				eAngle = (eAngle * Math.PI) / 180;				
-				
+				eAngle = (eAngle * Math.PI) / 180;
+
 				this.context.strokeStyle = '#FF0000';
 				this.context.lineWidth = 4;
 				this.context.beginPath();
@@ -170,25 +171,29 @@ export class FloorplannerView2D
 				this.drawTextLabel(`${angle}°`, this.viewmodel.convertX(location.x), this.viewmodel.convertY(location.y));
 			}
 		}
+		else if(this.viewmodel.mode == floorplannerModes.ADD || this.viewmodel.mode == floorplannerModes.DELETE)
+		{
+			this.drawTarget(this.viewmodel.targetX, this.viewmodel.targetY, null);
+		}
 		this.floorplan.getWalls().forEach((wall) => {this.drawWallLabels(wall);});
 		if(this.viewmodel._clickedWallControl != null)
 		{
 			this.drawCircle(this.viewmodel.convertX(this.viewmodel._clickedWallControl.x), this.viewmodel.convertY(this.viewmodel._clickedWallControl.y), 7, '#F7F7F7');
 		}
 	}
-	
+
 	zoom()
 	{
 		var originx = this.viewmodel.canvasElement.innerWidth() / 2.0;
 		var originy = this.viewmodel.canvasElement.innerHeight() / 2.0;
-		
+
 		if(Configuration.getNumericValue('scale') != 1)
 		{
 			this.context.setTransform(1, 0, 0, 1, 0, 0);
 			this.context.translate(originx, originy);
 			this.context.scale(Configuration.getNumericValue('scale'), Configuration.getNumericValue('scale'));
 			this.context.translate(-originx, -originy);
-		}		
+		}
 		else
 		{
 //			this.context.restore();
@@ -196,7 +201,7 @@ export class FloorplannerView2D
 		}
 		this.draw();
 	}
-	
+
 	drawCornerAngles(corner)
 	{
 		var ox = this.viewmodel.convertX(corner.location.x);
@@ -216,7 +221,7 @@ export class FloorplannerView2D
 			{
 				continue;
 			}
-			var ccwise = (Math.abs(corner.startAngles[i] - corner.endAngles[i]) > 180);			
+			var ccwise = (Math.abs(corner.startAngles[i] - corner.endAngles[i]) > 180);
 			this.context.strokeStyle = '#000000';
 			this.context.lineWidth = 4;
 			this.context.beginPath();
@@ -235,19 +240,19 @@ export class FloorplannerView2D
 			{
 				this.context.arc(ox, oy, radius, Math.min(sAngle, eAngle), Math.max(sAngle, eAngle), ccwise);
 			}
-			
+
 			this.context.stroke();
 //			this.drawCircle(this.viewmodel.convertX(location.x), this.viewmodel.convertY(location.y), 7, '#000000');
 			this.drawTextLabel(`${angle}°`, lx, ly);
 		}
-		
+
 	}
 
 	drawOriginCrossHair()
 	{
 		var ox = this.viewmodel.convertX(0);
 		var oy = this.viewmodel.convertY(0);
-		
+
 		//draw origin crosshair
 		this.context.fillStyle = '#0000FF';
 		this.context.fillRect(ox-2, oy-7.5, 4, 15);
@@ -336,7 +341,7 @@ export class FloorplannerView2D
 			var label = (!wallInformation.labels)?'':wallInformation.interiorlabel;
 			this.drawTextLabel(`${label}${Dimensioning.cmToMeasure(length)}` ,this.viewmodel.convertX(pos.x),this.viewmodel.convertY(pos.y-40));
 		}
-		
+
 	}
 
 	drawTextLabel(label, x, y, textcolor='#000000', strokecolor='#ffffff', style='normal')
@@ -368,11 +373,11 @@ export class FloorplannerView2D
 		if(!curved)
 		{
 			this.drawPolygon(
-					Utils.map(corners, function (corner) 
+					Utils.map(corners, function (corner)
 					{
 						return scope.viewmodel.convertX(corner.x);
 					}),
-					Utils.map(corners, function (corner) 
+					Utils.map(corners, function (corner)
 							{
 								return scope.viewmodel.convertY(corner.y);
 							}),false,null,true,color,edgeWidth);
@@ -381,25 +386,25 @@ export class FloorplannerView2D
 //		{
 //			this.drawPolygonCurved(edge.curvedCorners(),false,null,true,color,edgeWidth);
 //		}
-		
+
 	}
-	
+
 	/** */
 	drawWall(wall)
 	{
 		var selected = (wall === this.viewmodel.selectedWall);
 		var hover = (wall === this.viewmodel.activeWall && wall != this.viewmodel.selectedWall);
 		var color = wallColor;
-		
+
 		if (hover && this.viewmodel.mode == floorplannerModes.DELETE)
 		{
 			color = deleteColor;
-		}				
+		}
 		else if (hover)
 		{
 			color = wallColorHover;
 		}
-		
+
 		else if(selected)
 		{
 			color = wallColorSelected;
@@ -409,22 +414,55 @@ export class FloorplannerView2D
 		{
 //			this.drawCircle(this.viewmodel.convertX(wall.start.x), this.viewmodel.convertY(wall.start.y), 10, '#AAAAAA');
 //			this.drawCircle(this.viewmodel.convertX(wall.end.x), this.viewmodel.convertY(wall.end.y), 10, '#000000');
-			
+
 //			this.drawCircle(this.viewmodel.convertX(wall.a.x), this.viewmodel.convertY(wall.a.y), 10, '#ff8cd3');
 //			this.drawCircle(this.viewmodel.convertX(wall.b.x), this.viewmodel.convertY(wall.b.y), 10, '#eacd28');
-			
-			this.drawLine(this.viewmodel.convertX(wall.getStartX()),this.viewmodel.convertY(wall.getStartY()),this.viewmodel.convertX(wall.a.x),this.viewmodel.convertY(wall.a.y),5,'#006600');
+
+			this.drawLineBatch([
+				new BatchLine(
+					new Vector2(this.viewmodel.convertX(wall.getStartX()), this.viewmodel.convertY(wall.getStartY())),
+					new Vector2(this.viewmodel.convertX(wall.a.x), this.viewmodel.convertY(wall.a.y)),
+					5, '#006600'
+				),
+				new BatchLine(
+					new Vector2(this.viewmodel.convertX(wall.a.x),this.viewmodel.convertY(wall.a.y)),
+					new Vector2(this.viewmodel.convertX(wall.b.x),this.viewmodel.convertY(wall.b.y)),
+					5, '#006600'
+				),
+				new BatchLine(
+					new Vector2(this.viewmodel.convertX(wall.b.x),this.viewmodel.convertY(wall.b.y)),
+					new Vector2(this.viewmodel.convertX(wall.getEndX()),this.viewmodel.convertY(wall.getEndY())),
+					5, '#006600'
+				),
+				new BatchLine(
+					new Vector2(this.viewmodel.convertX(wall.getStartX()),this.viewmodel.convertY(wall.getStartY())),
+					new Vector2(this.viewmodel.convertX(wall.a.x),this.viewmodel.convertY(wall.a.y)),
+					1, '#00FF00'
+				),
+				new BatchLine(
+					new Vector2(this.viewmodel.convertX(wall.a.x),this.viewmodel.convertY(wall.a.y)),
+					new Vector2(this.viewmodel.convertX(wall.b.x),this.viewmodel.convertY(wall.b.y)),
+					1, '#00FF00'
+				),
+				new BatchLine(
+					new Vector2(this.viewmodel.convertX(wall.b.x),this.viewmodel.convertY(wall.b.y)),
+					new Vector2(this.viewmodel.convertX(wall.getEndX()),this.viewmodel.convertY(wall.getEndY())),
+					1, '#00FF00'
+				)
+			]);
+
+			/*this.drawLine(this.viewmodel.convertX(wall.getStartX()),this.viewmodel.convertY(wall.getStartY()),this.viewmodel.convertX(wall.a.x),this.viewmodel.convertY(wall.a.y),5,'#006600');
 			this.drawLine(this.viewmodel.convertX(wall.a.x),this.viewmodel.convertY(wall.a.y),this.viewmodel.convertX(wall.b.x),this.viewmodel.convertY(wall.b.y),5,'#006600');
 			this.drawLine(this.viewmodel.convertX(wall.b.x),this.viewmodel.convertY(wall.b.y),this.viewmodel.convertX(wall.getEndX()),this.viewmodel.convertY(wall.getEndY()),5,'#06600');
-			
+
 			this.drawLine(this.viewmodel.convertX(wall.getStartX()),this.viewmodel.convertY(wall.getStartY()),this.viewmodel.convertX(wall.a.x),this.viewmodel.convertY(wall.a.y),1,'#00FF00');
 			this.drawLine(this.viewmodel.convertX(wall.a.x),this.viewmodel.convertY(wall.a.y),this.viewmodel.convertX(wall.b.x),this.viewmodel.convertY(wall.b.y),1,'#00FF00');
-			this.drawLine(this.viewmodel.convertX(wall.b.x),this.viewmodel.convertY(wall.b.y),this.viewmodel.convertX(wall.getEndX()),this.viewmodel.convertY(wall.getEndY()),1,'#00FF00');
-			
+			this.drawLine(this.viewmodel.convertX(wall.b.x),this.viewmodel.convertY(wall.b.y),this.viewmodel.convertX(wall.getEndX()),this.viewmodel.convertY(wall.getEndY()),1,'#00FF00');*/
+
 			this.drawCircle(this.viewmodel.convertX(wall.a.x), this.viewmodel.convertY(wall.a.y), 10, '#D7D7D7');
 			this.drawCircle(this.viewmodel.convertX(wall.b.x), this.viewmodel.convertY(wall.b.y), 10, '#D7D7D7');
 		}
-		
+
 		if(wall.wallType == WallTypes.STRAIGHT)
 		{
 			this.drawLine(this.viewmodel.convertX(wall.getStartX()),this.viewmodel.convertY(wall.getStartY()),this.viewmodel.convertX(wall.getEndX()),this.viewmodel.convertY(wall.getEndY()),hover ? wallWidthHover : selected ? wallWidthSelected : wallWidth,color);
@@ -436,24 +474,24 @@ export class FloorplannerView2D
 //			this.drawBezierObject(wall.bezier, 10, '#FF0000');
 //			this.drawBezierObject(wall.bezier.offset(wall.thickness*0.5)[0], 3, '#F0F0F0');
 //			this.drawBezierObject(wall.bezier.offset(-wall.thickness*0.5)[0], 3, '#0F0F0F');
-			
+
 			this.drawCurvedLine(
-					this.viewmodel.convertX(wall.getStartX()),
-					this.viewmodel.convertY(wall.getStartY()),
-					
-					this.viewmodel.convertX(wall.a.x),
-					this.viewmodel.convertY(wall.a.y),
-					
-					this.viewmodel.convertX(wall.b.x),
-					this.viewmodel.convertY(wall.b.y),
-					
-					this.viewmodel.convertX(wall.getEndX()),
-					this.viewmodel.convertY(wall.getEndY()),
-					hover ? wallWidthHover : selected ? wallWidthSelected : wallWidth,color);
-			
+			this.viewmodel.convertX(wall.getStartX()),
+			this.viewmodel.convertY(wall.getStartY()),
+
+			this.viewmodel.convertX(wall.a.x),
+			this.viewmodel.convertY(wall.a.y),
+
+			this.viewmodel.convertX(wall.b.x),
+			this.viewmodel.convertY(wall.b.y),
+
+			this.viewmodel.convertX(wall.getEndX()),
+			this.viewmodel.convertY(wall.getEndY()),
+			hover ? wallWidthHover : selected ? wallWidthSelected : wallWidth,color);
+
 //			this.drawLine(this.viewmodel.convertX(project.x),this.viewmodel.convertY(project.y),this.viewmodel.convertX(p.x),this.viewmodel.convertY(p.y), 1, '#ff0000');
 		}
-		
+
 		if (!hover && !selected && wall.frontEdge)
 		{
 			this.drawEdge(wall.frontEdge, hover, isCurved);
@@ -462,9 +500,9 @@ export class FloorplannerView2D
 		{
 			this.drawEdge(wall.backEdge, hover, isCurved);
 		}
-		
+
 		if(selected)
-		{			
+		{
 			if(wall.wallType != WallTypes.CURVED)
 			{
 				this.drawCornerAngles(wall.start);
@@ -490,28 +528,28 @@ export class FloorplannerView2D
 			color = roomColorSelected;
 		}
 //		this.drawPolygon(
-//				Utils.map(room.corners, (corner) => 
+//				Utils.map(room.corners, (corner) =>
 //				{
 //					return scope.viewmodel.convertX(corner.x);
 //				}),
-//				Utils.map(room.corners, (corner) =>  
+//				Utils.map(room.corners, (corner) =>
 //				{
 //					return scope.viewmodel.convertY(corner.y);
-//				}), 
+//				}),
 //				true, color);
-		
+
 		var polygonPoints = [];
-		
+
 		for (var i=0;i<room.roomCornerPoints.length;i++)
 		{
 			polygonPoints.push([room.roomCornerPoints[i]]);
 		}
-		
+
 		this.drawPolygonCurved(polygonPoints, true, color);
-		
-		this.drawTextLabel(Dimensioning.cmToMeasure(room.area, 2)+String.fromCharCode(178), this.viewmodel.convertX(room.areaCenter.x), this.viewmodel.convertY(room.areaCenter.y), '#0000FF', '#00FF0000', 'bold');
-		this.drawTextLabel(room.name, this.viewmodel.convertX(room.areaCenter.x), this.viewmodel.convertY(room.areaCenter.y+30), '#363636', '#00FF0000', 'bold italic');
-		
+
+		this.drawTextLabel(Dimensioning.cmToMeasure(room.area, 2) + String.fromCharCode(178), this.viewmodel.convertX(room.areaCenter.x), this.viewmodel.convertY(room.areaCenter.y), '#0000FF', '#00FF0000', 'bold');
+		this.drawTextLabel(room.name, this.viewmodel.convertX(room.areaCenter.x), this.viewmodel.convertY(room.areaCenter.y + 30), '#363636', '#00FF0000', 'bold italic');
+
 //		Debuggin Room for correct order of polygon points with room walls
 //		if(selected)
 //		{
@@ -530,7 +568,7 @@ export class FloorplannerView2D
 		var cornerX = this.viewmodel.convertX(corner.x);
 		var cornerY = this.viewmodel.convertY(corner.y);
 		var hover = (corner === this.viewmodel.activeCorner && corner != this.viewmodel.selectedCorner);
-		var selected = (corner === this.viewmodel.selectedCorner);
+		var selected = (corner === this.viewmodel.selectedCorner) || (this.viewmodel.mode == floorplannerModes.ADD && corner === this.viewmodel.lastNode);
 		var color = cornerColor;
 		if (hover && this.viewmodel.mode == floorplannerModes.DELETE)
 		{
@@ -544,16 +582,16 @@ export class FloorplannerView2D
 		{
 			color = cornerColorSelected;
 		}
-		
+
 		if(selected)
 		{
 			this.drawCornerAngles(corner);
-			corner.adjacentCorners().forEach((neighbour) => 
+			corner.adjacentCorners().forEach((neighbour) =>
 			{
 				this.drawCornerAngles(neighbour);
 			});
 		}
-		
+
 		this.drawCircle(cornerX, cornerY, hover ? cornerRadiusHover : selected ? cornerRadiusSelected : cornerRadius, color);
 		// let cx = Dimensioning.roundOff(corner.x, 10);
 		// let cy = Dimensioning.roundOff(corner.y, 10);
@@ -564,30 +602,31 @@ export class FloorplannerView2D
 	/** */
 	drawTarget(x, y, lastNode)
 	{
-		this.drawCircle(this.viewmodel.convertX(x),this.viewmodel.convertY(y),cornerRadiusHover,cornerColorHover);
+		let color = this.viewmodel.mode == floorplannerModes.DELETE ? deleteColor : cornerColorHover;
+		this.drawCircle(this.viewmodel.convertX(x),this.viewmodel.convertY(y),cornerRadiusHover, color);
 		if (lastNode)
 		{
 			this.drawLine(this.viewmodel.convertX(lastNode.x),this.viewmodel.convertY(lastNode.y),this.viewmodel.convertX(x),this.viewmodel.convertY(y),wallWidthHover,wallColorHover);
 		}
 	}
-	
+
 	drawBezierObject(bezier, width=3, color='#f0f0f0')
 	{
 		this.drawCurvedLine(
 		this.viewmodel.convertX(bezier.points[0].x),
 		this.viewmodel.convertY(bezier.points[0].y),
-		
+
 		this.viewmodel.convertX(bezier.points[1].x),
 		this.viewmodel.convertY(bezier.points[1].y),
-		
+
 		this.viewmodel.convertX(bezier.points[2].x),
 		this.viewmodel.convertY(bezier.points[2].y),
-		
+
 		this.viewmodel.convertX(bezier.points[3].x),
 		this.viewmodel.convertY(bezier.points[3].y),
 		width,color);
 	}
-	
+
 	drawCurvedLine(startX, startY, aX, aY, bX, bY, endX, endY, width, color)
 	{
 		this.context.beginPath();
@@ -597,7 +636,7 @@ export class FloorplannerView2D
 		this.context.lineWidth = width+3;
 		this.context.strokeStyle = '#999999';
 		this.context.stroke();
-		
+
 		// width is an integer
 		// color is a hex string, i.e. #ff0000
 		this.context.beginPath();
@@ -622,7 +661,32 @@ export class FloorplannerView2D
 		this.context.strokeStyle = color;
 		this.context.stroke();
 	}
-	
+
+	/**
+	 * @param {BatchLine[]} batch
+	 *
+	 * @see https://www.html5rocks.com/en/tutorials/canvas/performance/#toc-batch
+	 */
+	drawLineBatch(batch) {
+		// width is an integer
+		// color is a hex string, i.e. #ff0000
+		let self = this;
+		let curColor = null;
+		let curWidth = null;
+		batch.forEach(function(line) {
+			if(line.width != curWidth || line.color != curColor) {
+				curWidth = line.width;
+				curColor = line.color;
+				self.context.beginPath();
+			}
+			self.context.moveTo(line.start.x, line.start.y);
+			self.context.lineTo(line.end.x, line.end.y);
+			self.context.lineWidth = line.width;
+			self.context.strokeStyle = line.color;
+		});
+		this.context.stroke();
+	}
+
 	/** */
 	drawPolygonCurved(pointsets, fill=true, fillColor='#FF00FF', stroke=false, strokeColor='#000000', strokeWidth=5)
 	{
@@ -630,7 +694,7 @@ export class FloorplannerView2D
 		fill = fill || false;
 		stroke = stroke || false;
 		this.context.beginPath();
-		
+
 		for (var i=0;i<pointsets.length;i++)
 		{
 			var pointset = pointsets[i];
@@ -644,7 +708,7 @@ export class FloorplannerView2D
 				else
 				{
 					this.context.lineTo(this.viewmodel.convertX(pointset[0].x), this.viewmodel.convertY(pointset[0].y));
-				}				
+				}
 			}
 //			If the pointset contains 3 points then it represents a bezier curve, ap1, ap2, cp2
 			else if(pointset.length == 3)
@@ -656,8 +720,8 @@ export class FloorplannerView2D
 						);
 			}
 		}
-		
-		this.context.closePath();
+
+		// this.context.closePath();
 		if (fill)
 		{
 			this.context.fillStyle = fillColor;
@@ -669,7 +733,7 @@ export class FloorplannerView2D
 			this.context.strokeStyle = strokeColor;
 			this.context.stroke();
 		}
-		
+
 //		Dubegging
 //		for (i=0;i<pointsets.length;i++)
 //		{
@@ -746,14 +810,39 @@ export class FloorplannerView2D
 			width = width / scale;
 			height = height / scale;
 		}
-		
+
+		let batch = [];
 		for (var x = 0; x <= (width / gspacing); x++)
 		{
-			this.drawLine((gspacing * x) + offsetX, 0, (gspacing * x) + offsetX, height, gridWidth, gridColor);
+			batch.push(new BatchLine(
+				new Vector2(
+					(gspacing * x) + offsetX,
+					0
+				),
+				new Vector2(
+					(gspacing * x) + offsetX,
+					height
+				),
+				gridWidth, gridColor
+			));
+			//this.drawLine((gspacing * x) + offsetX, 0, (gspacing * x) + offsetX, height, gridWidth, gridColor);
 		}
 		for (var y = 0; y <= (height / gspacing); y++)
 		{
-			this.drawLine(0, (gspacing * y) + offsetY, width, (gspacing * y) + offsetY, gridWidth, gridColor);
+			batch.push(new BatchLine(
+				new Vector2(
+					0,
+					(gspacing * y) + offsetY
+				),
+				new Vector2(
+					width,
+					(gspacing * y) + offsetY
+				),
+				gridWidth,
+				gridColor
+			));
+			// this.drawLine(0, (gspacing * y) + offsetY, width, (gspacing * y) + offsetY, gridWidth, gridColor);
 		}
+		this.drawLineBatch(batch, gridWidth, gridColor);
 	}
 }

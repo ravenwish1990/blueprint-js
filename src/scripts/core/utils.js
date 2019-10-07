@@ -87,7 +87,7 @@ export class Utils
 		}
 		return tTheta;
 	}
-	
+
 	/** shifts angle to be 0 to 2pi */
 	static getCyclicOrder(points, start=undefined)
 	{
@@ -115,7 +115,7 @@ export class Utils
 		}
 		return {indices: indices, angles: sortedAngles, points: sortedPoints};
 	}
-	
+
 	static argsort(numericalValues, direction=1)
 	{
 		var indices = Array.from(new Array(numericalValues.length),(val,index)=>index);
@@ -451,8 +451,8 @@ export class Region
 		this.points = points || [];
         this.length = points.length;
 	}
-	
-	area() 
+
+	area()
 	{
         var area = 0,
             i,
@@ -471,7 +471,7 @@ export class Region
         return area;
     };
 
-    centroid() 
+    centroid()
     {
         var x = 0,
             y = 0,
@@ -496,4 +496,11 @@ export class Region
 }
 
 
-
+export class BatchLine {
+	constructor(start, end, width, color) {
+		this.start = start;
+		this.end = end;
+		this.width = width;
+		this.color = color;
+	}
+}
